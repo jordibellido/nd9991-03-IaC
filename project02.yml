@@ -246,17 +246,44 @@ Resources:
       SecurityGroups:
       - Ref: ELBSecurityGroup
 
+  UdacityS3ReadOnlyEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Udacity-Role-for-RO-access-to-S3
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Tags:
+      - Key: Name
+        Value: !Ref EnvironmentName
+
+  InstanceProfileWithRolesForOurApp:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - Ref: UdacityS3ReadOnlyEC2
+
   WebServerLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          apt-get update -y
-          apt-get install apache2 -y
+          apt update --assume-yes
+          apt --assume-yes install awscli apache2 unzip
           systemctl start apache2.service
           cd /var/www/html
-          echo "Udacity Demo Web Server Up and Running!" > index.html
+          aws s3 cp s3://udacity-demo-1/udacity.zip .
+          unzip -o udacity.zip
+      IamInstanceProfile: !Ref InstanceProfileWithRolesForOurApp
       ImageId: !Ref AMIforEC2instances
       SecurityGroups:
       - Ref: WebServerSecurityGroup
@@ -274,8 +301,8 @@ Resources:
       - !Ref PrivateSubnet2
       LaunchConfigurationName:
         Ref: WebServerLaunchConfig
-      MinSize: '1'
-      MaxSize: '2'
+      MinSize: '4'
+      MaxSize: '4'
       TargetGroupARNs:
       - Ref: WebServerTargetGroup
       Tags:
